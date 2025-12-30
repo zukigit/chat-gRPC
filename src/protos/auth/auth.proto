@@ -13,6 +13,13 @@ message LoginResponse {
     string token = 1;
 }
 
+message Hello {
+    string name = 1;
+    string token = 2;
+    string message = 3;
+}
+
 service Auth {
-    rpc Login (LoginRequest) returns (LoginResponse) {} 
+    rpc Login (LoginRequest) returns (LoginResponse) {}
+    rpc HelloWorld (Hello) returns (Hello) {} 
 }

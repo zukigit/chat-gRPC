@@ -72,6 +72,28 @@ GENERATE_TOKEN:
 	}, nil
 }
 
+func (s *server) HelloWorld(ctx context.Context, hello *auth.Hello) (*auth.Hello, error) {
+	token, err := jwt.ParseWithClaims(hello.Token, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
+		// Validate signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return s.secretKey, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if _, ok := token.Claims.(*jwt.RegisteredClaims); !ok || !token.Valid {
+		return nil, fmt.Errorf("invalid token claims")
+	}
+
+	return &auth.Hello{
+		Message: "hello" + hello.Name,
+	}, nil
+}
+
 func main() {
 	fmt.Println("starting server")
 
