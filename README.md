@@ -1,1 +1,1 @@
-# chat-gRPC
+# gRPC practice repo
