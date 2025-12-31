@@ -3,3 +3,15 @@ syntax = "proto3";
 option go_package = "chat/";
 
 package chat;
+
+message MessageRequest {
+    string name = 1;
+}
+
+message MessageRespone {
+    bool success = 1;
+}
+
+service Chat {
+    rpc Send(MessageRequest) returns (MessageRespone) {}
+}

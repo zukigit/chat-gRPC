@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/zukigit/chat-gRPC/src/protos/auth"
+	"github.com/zukigit/chat-gRPC/src/protos/chat"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,6 +25,7 @@ type server struct {
 	mu        sync.RWMutex
 	userStore map[string]string
 	auth.UnimplementedAuthServer
+	chat.UnimplementedChatServer
 }
 
 func (s *server) register(userName, passwd string) {
@@ -72,27 +74,33 @@ GENERATE_TOKEN:
 	}, nil
 }
 
-func (s *server) HelloWorld(ctx context.Context, hello *auth.Hello) (*auth.Hello, error) {
-	token, err := jwt.ParseWithClaims(hello.Token, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
-		// Validate signing method
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return s.secretKey, nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if _, ok := token.Claims.(*jwt.RegisteredClaims); !ok || !token.Valid {
-		return nil, fmt.Errorf("invalid token claims")
-	}
-
-	return &auth.Hello{
-		Message: "hello" + hello.Name,
+func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.MessageRespone, error) {
+	return &chat.MessageRespone{
+		Success: true,
 	}, nil
 }
+
+// func (s *server) HelloWorld(ctx context.Context, hello *auth.Hello) (*auth.Hello, error) {
+// 	token, err := jwt.ParseWithClaims(hello.Token, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
+// 		// Validate signing method
+// 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+// 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+// 		}
+// 		return s.secretKey, nil
+// 	})
+
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	if _, ok := token.Claims.(*jwt.RegisteredClaims); !ok || !token.Valid {
+// 		return nil, fmt.Errorf("invalid token claims")
+// 	}
+
+// 	return &auth.Hello{
+// 		Message: "hello" + hello.Name,
+// 	}, nil
+// }
 
 func main() {
 	fmt.Println("starting server")
@@ -104,6 +112,7 @@ func main() {
 
 	s := grpc.NewServer()
 	auth.RegisterAuthServer(s, srv)
+	chat.RegisterChatServer(s, srv)
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
