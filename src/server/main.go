@@ -23,16 +23,18 @@ const (
 type server struct {
 	secretKey []byte
 	mu        sync.RWMutex
-	userStore map[string]string
+	users     map[string]*auth.User
 	auth.UnimplementedAuthServer
 	chat.UnimplementedChatServer
 }
 
-func (s *server) register(userName, passwd string) {
+func (s *server) register(user *auth.User) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.userStore[userName] = passwd
+	if user != nil {
+		s.users[user.GetUserName()] = user
+	}
 }
 
 func (s *server) generateToken(userName string) (string, error) {
@@ -52,19 +54,22 @@ func (s *server) generateToken(userName string) (string, error) {
 	return tokenString, nil
 }
 
-func (s *server) Login(ctx context.Context, request *auth.LoginRequest) (*auth.LoginResponse, error) {
-	passwd, exists := s.userStore[request.GetUserName()]
+func (s *server) Login(ctx context.Context, requestUser *auth.User) (*auth.LoginResponse, error) {
+	user, exists := s.users[requestUser.GetUserName()]
 	if !exists {
-		s.register(request.GetUserName(), request.GetPasswd())
-		goto GENERATE_TOKEN
+		user = &auth.User{
+			UserName: requestUser.UserName,
+			Passwd:   requestUser.Passwd,
+			IsActive: false,
+		}
+		s.register(user)
 	}
 
-	if passwd != request.GetPasswd() {
+	if user.GetPasswd() != requestUser.GetPasswd() {
 		return nil, status.Errorf(codes.Unauthenticated, "invalid username or password")
 	}
 
-GENERATE_TOKEN:
-	token, err := s.generateToken(request.GetUserName())
+	token, err := s.generateToken(user.GetUserName())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "could not generate token")
 	}
@@ -106,7 +111,7 @@ func main() {
 	fmt.Println("starting server")
 
 	srv := &server{
-		userStore: make(map[string]string),
+		users:     make(map[string]*auth.User),
 		secretKey: []byte("no_secret"),
 	}
 
