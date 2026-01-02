@@ -5,13 +5,21 @@ option go_package = "chat/";
 package chat;
 
 message MessageRequest {
-    string name = 1;
+    string message = 1;
+    string from = 2;
+    string to = 3;
+    string isPrivate = 4;
 }
 
 message MessageRespone {
     bool success = 1;
 }
 
+message ConnectRequest {
+    string token = 1;
+}
+
 service Chat {
     rpc Send(MessageRequest) returns (MessageRespone) {}
+    rpc Connect(ConnectRequest) returns (stream MessageRequest) {}
 }
