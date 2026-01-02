@@ -38,6 +38,26 @@ type server struct {
 	chat.UnimplementedChatServer
 }
 
+func (s *server) setActiveUser(userId string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	user, exist := s.users[userId]
+	if exist {
+		user.IsActive = true
+	}
+}
+
+func (s *server) setNonActiveUser(userId string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	user, exist := s.users[userId]
+	if exist {
+		user.IsActive = false
+	}
+}
+
 func (s *server) register(user *auth.User) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -206,9 +226,8 @@ func (s *server) Connect(req *chat.Empty, stream grpc.ServerStreamingServer[chat
 		return status.Errorf(codes.Internal, "could not get RegisteredClaims, Unknown type: %T", claims)
 	}
 
-	userName := claims.Subject
-
-	log.Printf("Streaming response for user: %s", userName)
+	s.setActiveUser(claims.Subject)
+	defer s.setNonActiveUser(claims.Subject)
 
 	for i := 0; i < 5; i++ {
 		message := &chat.MessageRequest{
