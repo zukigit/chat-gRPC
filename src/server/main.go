@@ -51,7 +51,12 @@ func (s *server) validateToken(requestToken string) (jwt.Claims, error) {
 		return nil, err
 	}
 
-	if claims, ok := token.Claims.(jwt.RegisteredClaims); ok && token.Valid {
+	claims, ok := token.Claims.(*jwt.RegisteredClaims)
+	if !ok {
+		return nil, fmt.Errorf("could not get claims, Unknown type: %T", token.Claims)
+	}
+
+	if token.Valid {
 		return claims, nil
 	}
 
