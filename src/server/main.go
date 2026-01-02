@@ -21,6 +21,15 @@ const (
 	address = ":56789"
 )
 
+type serverStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (ss *serverStream) Context() context.Context {
+	return ss.ctx
+}
+
 type server struct {
 	secretKey []byte
 	mu        sync.RWMutex
@@ -80,32 +89,7 @@ func (s *server) generateToken(userName string) (string, error) {
 	return tokenString, nil
 }
 
-func (s *server) Login(ctx context.Context, requestUser *auth.User) (*auth.LoginResponse, error) {
-	user, exists := s.users[requestUser.GetUserName()]
-	if !exists {
-		user = &auth.User{
-			UserName: requestUser.UserName,
-			Passwd:   requestUser.Passwd,
-			IsActive: false,
-		}
-		s.register(user)
-	}
-
-	if user.GetPasswd() != requestUser.GetPasswd() {
-		return nil, status.Errorf(codes.Unauthenticated, "invalid username or password")
-	}
-
-	token, err := s.generateToken(user.GetUserName())
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "could not generate token")
-	}
-
-	return &auth.LoginResponse{
-		Token: token,
-	}, nil
-}
-
-func unaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+func AuthUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 	if info.FullMethod == auth.Auth_Login_FullMethodName {
 		return handler(ctx, req)
 	}
@@ -143,10 +127,102 @@ func unaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, 
 	return handler(ctx, req)
 }
 
+func AuthStreamServerInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	if info.FullMethod == auth.Auth_Login_FullMethodName {
+		return handler(srv, ss)
+	}
+
+	md, ok := metadata.FromIncomingContext(ss.Context())
+	if !ok {
+		return status.Errorf(codes.Unauthenticated, "missing meta data")
+	}
+
+	values := md.Get("auth")
+
+	if len(values) == 0 {
+		return status.Errorf(codes.Unauthenticated, "missing auth token")
+	}
+
+	// Extract token from "Bearer <token>" format
+	requestToken := values[0]
+	if len(requestToken) > 7 && requestToken[:7] == "Bearer" {
+		requestToken = requestToken[7:]
+	}
+
+	server, ok := srv.(*server)
+	if !ok {
+		return status.Errorf(codes.Internal, "could not get server from UnaryServerInfo")
+	}
+
+	claims, err := server.validateToken(requestToken)
+	if err != nil {
+		return status.Errorf(codes.Internal, "token Validation failed, err: %s", err.Error())
+	}
+
+	ctx := context.WithValue(ss.Context(), "claims", claims)
+
+	wrappedSs := &serverStream{
+		ServerStream: ss,
+		ctx:          ctx,
+	}
+
+	return handler(srv, wrappedSs)
+}
+
+func (s *server) Login(ctx context.Context, requestUser *auth.User) (*auth.LoginResponse, error) {
+	user, exists := s.users[requestUser.GetUserName()]
+	if !exists {
+		user = &auth.User{
+			UserName: requestUser.UserName,
+			Passwd:   requestUser.Passwd,
+			IsActive: false,
+		}
+		s.register(user)
+	}
+
+	if user.GetPasswd() != requestUser.GetPasswd() {
+		return nil, status.Errorf(codes.Unauthenticated, "invalid username or password")
+	}
+
+	token, err := s.generateToken(user.GetUserName())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "could not generate token")
+	}
+
+	return &auth.LoginResponse{
+		Token: token,
+	}, nil
+}
+
 func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.MessageRespone, error) {
 	return &chat.MessageRespone{
 		Success: true,
 	}, nil
+}
+
+func (s *server) Connect(req *chat.Empty, stream grpc.ServerStreamingServer[chat.MessageRequest]) error {
+	claims, ok := stream.Context().Value("claims").(*jwt.RegisteredClaims)
+	if !ok {
+		return status.Errorf(codes.Internal, "could not get RegisteredClaims, Unknown type: %T", claims)
+	}
+
+	userName := claims.Subject
+
+	log.Printf("Streaming response for user: %s", userName)
+
+	for i := 0; i < 5; i++ {
+		message := &chat.MessageRequest{
+			Message: fmt.Sprintf("testing %d", i),
+		}
+		err := stream.Send(message)
+		if err != nil {
+			return err
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+
+	return nil
 }
 
 func main() {
@@ -159,7 +235,10 @@ func main() {
 
 	s := grpc.NewServer(
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-			return unaryInterceptor(ctx, req, info, handler)
+			return AuthUnaryInterceptor(ctx, req, info, handler)
+		}),
+		grpc.StreamInterceptor(func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+			return AuthStreamServerInterceptor(srv, ss, info, handler)
 		}),
 	)
 	auth.RegisterAuthServer(s, srv)
