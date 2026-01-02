@@ -13,6 +13,7 @@ import (
 	"github.com/zukigit/chat-gRPC/src/protos/chat"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -99,33 +100,49 @@ func (s *server) Login(ctx context.Context, requestUser *auth.User) (*auth.Login
 	}, nil
 }
 
+func unaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+	if info.FullMethod == auth.Auth_Login_FullMethodName {
+		return handler(ctx, req)
+	}
+
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, status.Errorf(codes.Unauthenticated, "missing meta data")
+	}
+
+	values := md.Get("auth")
+
+	if len(values) == 0 {
+		return nil, status.Errorf(codes.Unauthenticated, "missing auth token")
+	}
+
+	// Extract token from "Bearer <token>" format
+	requestToken := values[0]
+	if len(requestToken) > 7 && requestToken[:7] == "Bearer" {
+		requestToken = requestToken[7:]
+	}
+
+	srv, ok := info.Server.(*server)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "could not get server from UnaryServerInfo")
+	}
+
+	claims, err := srv.validateToken(requestToken)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Token Validation failed, err: %s", err.Error())
+	}
+
+	// Add claims to context for use in handlers
+	ctx = context.WithValue(ctx, "claims", claims)
+
+	return handler(ctx, req)
+}
+
 func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.MessageRespone, error) {
 	return &chat.MessageRespone{
 		Success: true,
 	}, nil
 }
-
-// func (s *server) HelloWorld(ctx context.Context, hello *auth.Hello) (*auth.Hello, error) {
-// 	token, err := jwt.ParseWithClaims(hello.Token, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
-// 		// Validate signing method
-// 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-// 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-// 		}
-// 		return s.secretKey, nil
-// 	})
-
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	if _, ok := token.Claims.(*jwt.RegisteredClaims); !ok || !token.Valid {
-// 		return nil, fmt.Errorf("invalid token claims")
-// 	}
-
-// 	return &auth.Hello{
-// 		Message: "hello" + hello.Name,
-// 	}, nil
-// }
 
 func main() {
 	fmt.Println("starting server")
@@ -135,7 +152,11 @@ func main() {
 		secretKey: []byte("no_secret"),
 	}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+			return unaryInterceptor(ctx, req, info, handler)
+		}),
+	)
 	auth.RegisterAuthServer(s, srv)
 	chat.RegisterChatServer(s, srv)
 
