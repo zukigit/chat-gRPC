@@ -62,7 +62,7 @@ type MessageRequest struct {
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	From          string                 `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
 	To            string                 `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	IsPrivate     string                 `protobuf:"bytes,4,opt,name=isPrivate,proto3" json:"isPrivate,omitempty"`
+	IsPrivate     bool                   `protobuf:"varint,4,opt,name=isPrivate,proto3" json:"isPrivate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -118,11 +118,11 @@ func (x *MessageRequest) GetTo() string {
 	return ""
 }
 
-func (x *MessageRequest) GetIsPrivate() string {
+func (x *MessageRequest) GetIsPrivate() bool {
 	if x != nil {
 		return x.IsPrivate
 	}
-	return ""
+	return false
 }
 
 type MessageRespone struct {
@@ -179,7 +179,7 @@ const file_src_protos_chat_chat_proto_rawDesc = "" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x03 \x01(\tR\x02to\x12\x1c\n" +
-	"\tisPrivate\x18\x04 \x01(\tR\tisPrivate\"*\n" +
+	"\tisPrivate\x18\x04 \x01(\bR\tisPrivate\"*\n" +
 	"\x0eMessageRespone\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess2n\n" +
 	"\x04Chat\x124\n" +

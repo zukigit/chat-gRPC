@@ -10,7 +10,7 @@ message MessageRequest {
     string message = 1;
     string from = 2;
     string to = 3;
-    string isPrivate = 4;
+    bool isPrivate = 4;
 }
 
 message MessageRespone {

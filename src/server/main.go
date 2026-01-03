@@ -34,7 +34,7 @@ type user struct {
 	userName    string
 	passwd      string
 	isActive    bool
-	messageChan chan chat.MessageRequest
+	messageChan chan *chat.MessageRequest
 }
 
 type server struct {
@@ -92,6 +92,11 @@ func (s *server) validateToken(requestToken string) (jwt.Claims, error) {
 	claims, ok := token.Claims.(*jwt.RegisteredClaims)
 	if !ok {
 		return nil, fmt.Errorf("could not get claims, Unknown type: %T", token.Claims)
+	}
+
+	_, exist := s.users[claims.Subject]
+	if !exist {
+		return nil, fmt.Errorf("user %s does not exist, call Login again", claims.Subject)
 	}
 
 	if token.Valid {
@@ -205,7 +210,7 @@ func (s *server) Login(ctx context.Context, req *auth.LoginRequest) (*auth.Login
 			userName:    req.UserName,
 			passwd:      req.Passwd,
 			isActive:    false,
-			messageChan: make(chan chat.MessageRequest),
+			messageChan: make(chan *chat.MessageRequest),
 		}
 		s.register(regUser)
 	}
@@ -225,6 +230,35 @@ func (s *server) Login(ctx context.Context, req *auth.LoginRequest) (*auth.Login
 }
 
 func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.MessageRespone, error) {
+	claims, ok := ctx.Value("claims").(*jwt.RegisteredClaims)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "could not get RegisteredClaims, Unknown type: %T", claims)
+	}
+
+	if req == nil {
+		return nil, status.Errorf(codes.Internal, "MessageRequest is nil")
+	}
+
+	req.From = claims.Subject
+
+	if req.To != "" {
+		req.IsPrivate = true
+
+		user, exist := s.users[claims.Subject]
+		if !exist {
+			return nil, status.Errorf(codes.Internal, "user %s does not exist, call Login again", claims.Subject)
+		}
+
+		user.messageChan <- req
+	} else {
+		// send message to public channel
+		req.IsPrivate = false
+
+		for _, user := range s.users {
+			user.messageChan <- req
+		}
+	}
+
 	return &chat.MessageRespone{
 		Success: true,
 	}, nil
@@ -239,10 +273,8 @@ func (s *server) Connect(req *chat.Empty, stream grpc.ServerStreamingServer[chat
 	s.setActiveUser(claims.Subject)
 	defer s.setNonActiveUser(claims.Subject)
 
-	for i := 0; i < 5; i++ {
-		message := &chat.MessageRequest{
-			Message: fmt.Sprintf("testing %d", i),
-		}
+	for {
+		message := <-s.users[claims.Subject].messageChan
 		err := stream.Send(message)
 		if err != nil {
 			return err
@@ -250,8 +282,6 @@ func (s *server) Connect(req *chat.Empty, stream grpc.ServerStreamingServer[chat
 
 		time.Sleep(2 * time.Second)
 	}
-
-	return nil
 }
 
 func main() {
