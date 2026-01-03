@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 const (
@@ -18,7 +19,28 @@ const (
 )
 
 type authClient struct {
+	token  string
 	client auth.AuthClient
+}
+
+func authUnaryInterceptor(token *string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		if method != auth.Auth_Login_FullMethodName {
+			ctx = metadata.AppendToOutgoingContext(ctx, "auth", "Bearer "+*token)
+		}
+
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+}
+
+func authStreamInterceptor(token *string) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		if method != auth.Auth_Login_FullMethodName {
+			ctx = metadata.AppendToOutgoingContext(ctx, "auth", "Bearer "+*token)
+		}
+
+		return streamer(ctx, desc, cc, method, opts...)
+	}
 }
 
 func newAuthClient() (*authClient, error) {
@@ -66,6 +88,7 @@ func main() {
 	}
 
 	fmt.Printf("connected, token: %s\n", res.Token)
+
 	fmt.Print("who do you want to connet?(empty for public): ")
 	fmt.Scanln(&connectUser)
 }
