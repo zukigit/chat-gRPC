@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"syscall"
 	"time"
 
 	"github.com/zukigit/chat-gRPC/src/protos/auth"
+	"golang.org/x/term"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -19,33 +21,51 @@ type authClient struct {
 	client auth.AuthClient
 }
 
-func main() {
-	fmt.Println("strting client ...")
-
-	context, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	req := &auth.LoginRequest{
-		UserName: "zuki",
-		Passwd:   "123123",
-	}
-
+func newAuthClient() (*authClient, error) {
 	conn, err := grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("grpc.NewClient failed, err: %s", err.Error())
 	}
 
-	authClient := &authClient{
+	return &authClient{
 		client: auth.NewAuthClient(conn),
-	}
+	}, nil
+}
 
-	res, err := authClient.client.Login(context, req)
+func main() {
+	fmt.Println("strting client ...")
+	var userName, connectUser string
+
+	fmt.Print("userName: ")
+	fmt.Scanln(&userName)
+
+	fmt.Print("password: ")
+	passwdByte, err := term.ReadPassword(int(syscall.Stdin))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println(res.Token)
+	authClient, err := newAuthClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	context, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	fmt.Print("connecting ...")
+	res, err := authClient.client.Login(context, &auth.LoginRequest{
+		UserName: userName,
+		Passwd:   string(passwdByte),
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("connected, token: %s\n", res.Token)
+	fmt.Print("who do you want to connet?(empty for public): ")
+	fmt.Scanln(&connectUser)
 }
