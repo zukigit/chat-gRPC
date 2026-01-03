@@ -30,10 +30,19 @@ func (ss *serverStream) Context() context.Context {
 	return ss.ctx
 }
 
+type user struct {
+	userName    string
+	passwd      string
+	isActive    bool
+	messageChan chan chat.MessageRequest
+}
+
 type server struct {
-	secretKey []byte
-	mu        sync.RWMutex
-	users     map[string]*auth.User
+	secretKey      []byte
+	mu             sync.RWMutex
+	users          map[string]*user
+	messages       chan chat.MessageRequest
+	activeChannels map[string]chan chat.MessageRequest
 	auth.UnimplementedAuthServer
 	chat.UnimplementedChatServer
 }
@@ -44,7 +53,7 @@ func (s *server) setActiveUser(userId string) {
 
 	user, exist := s.users[userId]
 	if exist {
-		user.IsActive = true
+		user.isActive = true
 	}
 }
 
@@ -54,16 +63,16 @@ func (s *server) setNonActiveUser(userId string) {
 
 	user, exist := s.users[userId]
 	if exist {
-		user.IsActive = false
+		user.isActive = false
 	}
 }
 
-func (s *server) register(user *auth.User) {
+func (s *server) register(user *user) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if user != nil {
-		s.users[user.GetUserName()] = user
+		s.users[user.userName] = user
 	}
 }
 
@@ -189,22 +198,23 @@ func AuthStreamServerInterceptor(srv any, ss grpc.ServerStream, info *grpc.Strea
 	return handler(srv, wrappedSs)
 }
 
-func (s *server) Login(ctx context.Context, requestUser *auth.User) (*auth.LoginResponse, error) {
-	user, exists := s.users[requestUser.GetUserName()]
+func (s *server) Login(ctx context.Context, req *auth.LoginRequest) (*auth.LoginResponse, error) {
+	regUser, exists := s.users[req.GetUserName()]
 	if !exists {
-		user = &auth.User{
-			UserName: requestUser.UserName,
-			Passwd:   requestUser.Passwd,
-			IsActive: false,
+		regUser = &user{
+			userName:    req.UserName,
+			passwd:      req.Passwd,
+			isActive:    false,
+			messageChan: make(chan chat.MessageRequest),
 		}
-		s.register(user)
+		s.register(regUser)
 	}
 
-	if user.GetPasswd() != requestUser.GetPasswd() {
+	if regUser.passwd != req.GetPasswd() {
 		return nil, status.Errorf(codes.Unauthenticated, "invalid username or password")
 	}
 
-	token, err := s.generateToken(user.GetUserName())
+	token, err := s.generateToken(regUser.userName)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "could not generate token")
 	}
@@ -248,7 +258,8 @@ func main() {
 	fmt.Println("starting server")
 
 	srv := &server{
-		users:     make(map[string]*auth.User),
+		users:     make(map[string]*user),
+		messages:  make(chan chat.MessageRequest, 5),
 		secretKey: []byte("no_secret"),
 	}
 

@@ -4,10 +4,9 @@ option go_package = "auth/";
 
 package auth;
 
-message User {
+message LoginRequest {
     string userName = 1;
     string passwd = 2;
-    bool isActive = 3;
 }
 
 message LoginResponse {
@@ -15,5 +14,5 @@ message LoginResponse {
 }
 
 service Auth {
-    rpc Login (User) returns (LoginResponse) {}
+    rpc Login (LoginRequest) returns (LoginResponse) {}
 }
