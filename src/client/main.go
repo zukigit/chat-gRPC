@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,7 +20,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const (
+var (
 	address = "localhost:56789"
 )
 
@@ -31,8 +36,6 @@ func authUnaryInterceptor(token *string) grpc.UnaryClientInterceptor {
 			return fmt.Errorf("token is nil")
 		}
 
-		fmt.Println("token", *token)
-
 		if method != auth.Auth_Login_FullMethodName {
 			ctx = metadata.AppendToOutgoingContext(ctx, "auth", *token)
 		}
@@ -43,8 +46,12 @@ func authUnaryInterceptor(token *string) grpc.UnaryClientInterceptor {
 
 func authStreamInterceptor(token *string) grpc.StreamClientInterceptor {
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		if token == nil {
+			return nil, fmt.Errorf("token is nil")
+		}
+
 		if method != auth.Auth_Login_FullMethodName {
-			ctx = metadata.AppendToOutgoingContext(ctx, "auth", "Bearer "+*token)
+			ctx = metadata.AppendToOutgoingContext(ctx, "auth", *token)
 		}
 
 		return streamer(ctx, desc, cc, method, opts...)
@@ -70,9 +77,66 @@ func newClient() (*client, error) {
 	}, nil
 }
 
+func (client *client) connect(connectUser string) {
+	fmt.Print("connecting ...")
+	stream, err := client.chatClient.Connect(context.Background(), &chat.ConnectRequest{
+		ConnectUser: connectUser,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("connected")
+
+	for {
+		response, err := stream.Recv()
+		if err != nil && errors.Is(io.EOF, err) {
+			fmt.Println("Stream ended")
+			break
+		}
+		if err != nil {
+			fmt.Println("err response, err: ", err.Error())
+			continue
+		}
+
+		if response.IsPrivate {
+			fmt.Printf("%s:%s\n", response.From, response.Message)
+		} else {
+			fmt.Printf("Public(%s):%s\n", response.From, response.Message)
+		}
+	}
+}
+
+func (client *client) send(connectUser string) {
+	var message string = ""
+	var err error
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		message = ""
+
+		fmt.Print("message: ")
+		message, err = reader.ReadString('\n')
+		if err != nil {
+			fmt.Println("reading string failed, err:", err.Error())
+			continue
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, err = client.chatClient.Send(ctx, &chat.MessageRequest{
+			Message: strings.TrimSuffix(message, "\n"),
+			To:      connectUser,
+		})
+		if err != nil {
+			fmt.Println("sending message failed, err:", err.Error())
+		}
+		cancel()
+	}
+}
+
 func main() {
-	fmt.Println("strting client ...")
-	var userName, connectUser string
+	var userName, connectUser, mode string
+
+	fmt.Print("server address (default: localhost:56789): ")
+	fmt.Scanln(&address)
 
 	fmt.Print("userName: ")
 	fmt.Scanln(&userName)
@@ -83,16 +147,26 @@ func main() {
 		log.Fatal(err)
 	}
 
+	fmt.Printf("\nmode(send/connect):")
+	fmt.Scanln(&mode)
+
+	if mode != "connect" && mode != "send" {
+		log.Fatal(fmt.Errorf("unkown mode: %s", mode))
+	}
+
+	fmt.Print("who do you want to send or connet?(empty for public): ")
+	fmt.Scanln(&connectUser)
+
 	client, err := newClient()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	context, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	fmt.Print("connecting ...")
-	res, err := client.authClient.Login(context, &auth.LoginRequest{
+	fmt.Print("Logging in ...")
+	res, err := client.authClient.Login(ctx, &auth.LoginRequest{
 		UserName: userName,
 		Passwd:   string(passwdByte),
 	})
@@ -100,18 +174,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("connected, token: %s\n", res.Token)
+	fmt.Println("done")
 	*client.token = res.Token
 
-	fmt.Print("who do you want to connet?(empty for public): ")
-	fmt.Scanln(&connectUser)
-
-	msgRes, err := client.chatClient.Send(context, &chat.MessageRequest{
-		Message: "hello",
-	})
-	if err != nil {
-		log.Fatal(err)
+	if mode == "connect" {
+		client.connect(connectUser)
 	}
 
-	fmt.Println("msgRes.Success", msgRes.Success)
+	if mode == "send" {
+		client.send(connectUser)
+	}
 }

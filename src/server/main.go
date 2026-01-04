@@ -254,8 +254,17 @@ func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.Mess
 		req.IsPrivate = false
 
 		for _, user := range s.users {
-			user.messageChan <- req
+			if user.userName != claims.Subject {
+				user.messageChan <- req
+			}
 		}
+	}
+
+	// send message to self
+	req.IsPrivate = true
+	user, exist := s.users[claims.Subject]
+	if exist {
+		user.messageChan <- req
 	}
 
 	return &chat.MessageRespone{
