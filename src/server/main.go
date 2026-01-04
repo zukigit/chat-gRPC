@@ -246,12 +246,9 @@ func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.Mess
 		user, exist := s.users[req.To]
 		if !exist {
 			return nil, status.Errorf(codes.Internal, "user %s does not exist, call Login again", claims.Subject)
-		} else {
-			fmt.Println("user exist")
 		}
 
 		user.messageChan <- req
-		fmt.Println("message sent")
 	} else {
 		// send message to public channel
 		req.IsPrivate = false
@@ -276,11 +273,9 @@ func (s *server) Connect(req *chat.ConnectRequest, stream grpc.ServerStreamingSe
 	defer s.setNonActiveUser(claims.Subject)
 
 	for {
-		fmt.Println("s.users[claims.Subject].userName", s.users[claims.Subject].userName)
 		message := <-s.users[claims.Subject].messageChan
 
 		// check who sent the message
-		fmt.Println("req.ConnectUser", req.ConnectUser)
 		if req.ConnectUser != "" && req.ConnectUser != message.From {
 			continue
 		}
