@@ -240,12 +240,12 @@ func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.Mess
 
 	req.From = claims.Subject
 
-	if req.To != "" {
+	if req.To != "" && req.To != claims.Subject {
 		req.IsPrivate = true
 
 		user, exist := s.users[req.To]
 		if !exist {
-			return nil, status.Errorf(codes.Internal, "user %s does not exist, call Login again", claims.Subject)
+			return nil, status.Errorf(codes.Internal, "request user %s does not exist", req.To)
 		}
 
 		user.messageChan <- req
@@ -256,6 +256,7 @@ func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.Mess
 		for _, user := range s.users {
 			if user.userName != claims.Subject {
 				user.messageChan <- req
+				fmt.Println("message sent to", user.userName)
 			}
 		}
 	}
@@ -278,20 +279,26 @@ func (s *server) Connect(req *chat.ConnectRequest, stream grpc.ServerStreamingSe
 		return status.Errorf(codes.Internal, "could not get RegisteredClaims, Unknown type: %T", claims)
 	}
 
-	s.setActiveUser(claims.Subject)
-	defer s.setNonActiveUser(claims.Subject)
-
 	for {
-		message := <-s.users[claims.Subject].messageChan
+		select {
+		case <-stream.Context().Done():
+			// Client disconnected, exit cleanly
+			return stream.Context().Err()
+		case message, ok := <-s.users[claims.Subject].messageChan:
+			if !ok {
+				return nil
+			}
 
-		// check who sent the message
-		if req.ConnectUser != "" && req.ConnectUser != message.From {
-			continue
-		}
+			// check who sent the message
+			if req.ConnectUser != "" && req.ConnectUser != message.From {
+				fmt.Println("skipped", req.ConnectUser, message.From)
+				continue
+			}
 
-		err := stream.Send(message)
-		if err != nil {
-			return err
+			err := stream.Send(message)
+			if err != nil {
+				return err
+			}
 		}
 	}
 }
