@@ -21,26 +21,27 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type Empty struct {
+type ConnectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	ConnectUser   string                 `protobuf:"bytes,1,opt,name=connectUser,proto3" json:"connectUser,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Empty) Reset() {
-	*x = Empty{}
+func (x *ConnectRequest) Reset() {
+	*x = ConnectRequest{}
 	mi := &file_src_protos_chat_chat_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Empty) String() string {
+func (x *ConnectRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Empty) ProtoMessage() {}
+func (*ConnectRequest) ProtoMessage() {}
 
-func (x *Empty) ProtoReflect() protoreflect.Message {
+func (x *ConnectRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_src_protos_chat_chat_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -52,9 +53,16 @@ func (x *Empty) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Empty.ProtoReflect.Descriptor instead.
-func (*Empty) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConnectRequest.ProtoReflect.Descriptor instead.
+func (*ConnectRequest) Descriptor() ([]byte, []int) {
 	return file_src_protos_chat_chat_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ConnectRequest) GetConnectUser() string {
+	if x != nil {
+		return x.ConnectUser
+	}
+	return ""
 }
 
 type MessageRequest struct {
@@ -173,18 +181,19 @@ var File_src_protos_chat_chat_proto protoreflect.FileDescriptor
 
 const file_src_protos_chat_chat_proto_rawDesc = "" +
 	"\n" +
-	"\x1asrc/protos/chat/chat.proto\x12\x04chat\"\a\n" +
-	"\x05Empty\"l\n" +
+	"\x1asrc/protos/chat/chat.proto\x12\x04chat\"2\n" +
+	"\x0eConnectRequest\x12 \n" +
+	"\vconnectUser\x18\x01 \x01(\tR\vconnectUser\"l\n" +
 	"\x0eMessageRequest\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x03 \x01(\tR\x02to\x12\x1c\n" +
 	"\tisPrivate\x18\x04 \x01(\bR\tisPrivate\"*\n" +
 	"\x0eMessageRespone\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess2n\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess2w\n" +
 	"\x04Chat\x124\n" +
-	"\x04Send\x12\x14.chat.MessageRequest\x1a\x14.chat.MessageRespone\"\x00\x120\n" +
-	"\aConnect\x12\v.chat.Empty\x1a\x14.chat.MessageRequest\"\x000\x01B\aZ\x05chat/b\x06proto3"
+	"\x04Send\x12\x14.chat.MessageRequest\x1a\x14.chat.MessageRespone\"\x00\x129\n" +
+	"\aConnect\x12\x14.chat.ConnectRequest\x1a\x14.chat.MessageRequest\"\x000\x01B\aZ\x05chat/b\x06proto3"
 
 var (
 	file_src_protos_chat_chat_proto_rawDescOnce sync.Once
@@ -200,13 +209,13 @@ func file_src_protos_chat_chat_proto_rawDescGZIP() []byte {
 
 var file_src_protos_chat_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_src_protos_chat_chat_proto_goTypes = []any{
-	(*Empty)(nil),          // 0: chat.Empty
+	(*ConnectRequest)(nil), // 0: chat.ConnectRequest
 	(*MessageRequest)(nil), // 1: chat.MessageRequest
 	(*MessageRespone)(nil), // 2: chat.MessageRespone
 }
 var file_src_protos_chat_chat_proto_depIdxs = []int32{
 	1, // 0: chat.Chat.Send:input_type -> chat.MessageRequest
-	0, // 1: chat.Chat.Connect:input_type -> chat.Empty
+	0, // 1: chat.Chat.Connect:input_type -> chat.ConnectRequest
 	2, // 2: chat.Chat.Send:output_type -> chat.MessageRespone
 	1, // 3: chat.Chat.Connect:output_type -> chat.MessageRequest
 	2, // [2:4] is the sub-list for method output_type

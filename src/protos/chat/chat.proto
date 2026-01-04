@@ -4,7 +4,9 @@ option go_package = "chat/";
 
 package chat;
 
-message Empty {}
+message ConnectRequest {
+    string connectUser = 1;
+}
 
 message MessageRequest {
     string message = 1;
@@ -19,5 +21,5 @@ message MessageRespone {
 
 service Chat {
     rpc Send(MessageRequest) returns (MessageRespone) {}
-    rpc Connect(Empty) returns (stream MessageRequest) {}
+    rpc Connect(ConnectRequest) returns (stream MessageRequest) {}
 }

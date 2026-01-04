@@ -28,7 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ChatClient interface {
 	Send(ctx context.Context, in *MessageRequest, opts ...grpc.CallOption) (*MessageRespone, error)
-	Connect(ctx context.Context, in *Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MessageRequest], error)
+	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MessageRequest], error)
 }
 
 type chatClient struct {
@@ -49,13 +49,13 @@ func (c *chatClient) Send(ctx context.Context, in *MessageRequest, opts ...grpc.
 	return out, nil
 }
 
-func (c *chatClient) Connect(ctx context.Context, in *Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MessageRequest], error) {
+func (c *chatClient) Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MessageRequest], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Chat_ServiceDesc.Streams[0], Chat_Connect_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[Empty, MessageRequest]{ClientStream: stream}
+	x := &grpc.GenericClientStream[ConnectRequest, MessageRequest]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ type Chat_ConnectClient = grpc.ServerStreamingClient[MessageRequest]
 // for forward compatibility.
 type ChatServer interface {
 	Send(context.Context, *MessageRequest) (*MessageRespone, error)
-	Connect(*Empty, grpc.ServerStreamingServer[MessageRequest]) error
+	Connect(*ConnectRequest, grpc.ServerStreamingServer[MessageRequest]) error
 	mustEmbedUnimplementedChatServer()
 }
 
@@ -87,7 +87,7 @@ type UnimplementedChatServer struct{}
 func (UnimplementedChatServer) Send(context.Context, *MessageRequest) (*MessageRespone, error) {
 	return nil, status.Error(codes.Unimplemented, "method Send not implemented")
 }
-func (UnimplementedChatServer) Connect(*Empty, grpc.ServerStreamingServer[MessageRequest]) error {
+func (UnimplementedChatServer) Connect(*ConnectRequest, grpc.ServerStreamingServer[MessageRequest]) error {
 	return status.Error(codes.Unimplemented, "method Connect not implemented")
 }
 func (UnimplementedChatServer) mustEmbedUnimplementedChatServer() {}
@@ -130,11 +130,11 @@ func _Chat_Send_Handler(srv interface{}, ctx context.Context, dec func(interface
 }
 
 func _Chat_Connect_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(Empty)
+	m := new(ConnectRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(ChatServer).Connect(m, &grpc.GenericServerStream[Empty, MessageRequest]{ServerStream: stream})
+	return srv.(ChatServer).Connect(m, &grpc.GenericServerStream[ConnectRequest, MessageRequest]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.

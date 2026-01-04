@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/zukigit/chat-gRPC/src/protos/auth"
+	"github.com/zukigit/chat-gRPC/src/protos/chat"
 	"golang.org/x/term"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -18,15 +19,22 @@ const (
 	address = "localhost:56789"
 )
 
-type authClient struct {
-	token  string
-	client auth.AuthClient
+type client struct {
+	token      *string
+	authClient auth.AuthClient
+	chatClient chat.ChatClient
 }
 
 func authUnaryInterceptor(token *string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		if token == nil {
+			return fmt.Errorf("token is nil")
+		}
+
+		fmt.Println("token", *token)
+
 		if method != auth.Auth_Login_FullMethodName {
-			ctx = metadata.AppendToOutgoingContext(ctx, "auth", "Bearer "+*token)
+			ctx = metadata.AppendToOutgoingContext(ctx, "auth", *token)
 		}
 
 		return invoker(ctx, method, req, reply, cc, opts...)
@@ -43,17 +51,22 @@ func authStreamInterceptor(token *string) grpc.StreamClientInterceptor {
 	}
 }
 
-func newAuthClient() (*authClient, error) {
+func newClient() (*client, error) {
+	token := ""
 	conn, err := grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(authUnaryInterceptor(&token)),
+		grpc.WithStreamInterceptor(authStreamInterceptor(&token)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("grpc.NewClient failed, err: %s", err.Error())
 	}
 
-	return &authClient{
-		client: auth.NewAuthClient(conn),
+	return &client{
+		authClient: auth.NewAuthClient(conn),
+		chatClient: chat.NewChatClient(conn),
+		token:      &token,
 	}, nil
 }
 
@@ -70,7 +83,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	authClient, err := newAuthClient()
+	client, err := newClient()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -79,7 +92,7 @@ func main() {
 	defer cancel()
 
 	fmt.Print("connecting ...")
-	res, err := authClient.client.Login(context, &auth.LoginRequest{
+	res, err := client.authClient.Login(context, &auth.LoginRequest{
 		UserName: userName,
 		Passwd:   string(passwdByte),
 	})
@@ -88,7 +101,17 @@ func main() {
 	}
 
 	fmt.Printf("connected, token: %s\n", res.Token)
+	*client.token = res.Token
 
 	fmt.Print("who do you want to connet?(empty for public): ")
 	fmt.Scanln(&connectUser)
+
+	msgRes, err := client.chatClient.Send(context, &chat.MessageRequest{
+		Message: "hello",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("msgRes.Success", msgRes.Success)
 }

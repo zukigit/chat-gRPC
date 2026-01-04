@@ -41,7 +41,6 @@ type server struct {
 	secretKey      []byte
 	mu             sync.RWMutex
 	users          map[string]*user
-	messages       chan chat.MessageRequest
 	activeChannels map[string]chan chat.MessageRequest
 	auth.UnimplementedAuthServer
 	chat.UnimplementedChatServer
@@ -210,7 +209,7 @@ func (s *server) Login(ctx context.Context, req *auth.LoginRequest) (*auth.Login
 			userName:    req.UserName,
 			passwd:      req.Passwd,
 			isActive:    false,
-			messageChan: make(chan *chat.MessageRequest),
+			messageChan: make(chan *chat.MessageRequest, 100),
 		}
 		s.register(regUser)
 	}
@@ -244,12 +243,15 @@ func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.Mess
 	if req.To != "" {
 		req.IsPrivate = true
 
-		user, exist := s.users[claims.Subject]
+		user, exist := s.users[req.To]
 		if !exist {
 			return nil, status.Errorf(codes.Internal, "user %s does not exist, call Login again", claims.Subject)
+		} else {
+			fmt.Println("user exist")
 		}
 
 		user.messageChan <- req
+		fmt.Println("message sent")
 	} else {
 		// send message to public channel
 		req.IsPrivate = false
@@ -264,7 +266,7 @@ func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.Mess
 	}, nil
 }
 
-func (s *server) Connect(req *chat.Empty, stream grpc.ServerStreamingServer[chat.MessageRequest]) error {
+func (s *server) Connect(req *chat.ConnectRequest, stream grpc.ServerStreamingServer[chat.MessageRequest]) error {
 	claims, ok := stream.Context().Value("claims").(*jwt.RegisteredClaims)
 	if !ok {
 		return status.Errorf(codes.Internal, "could not get RegisteredClaims, Unknown type: %T", claims)
@@ -274,13 +276,19 @@ func (s *server) Connect(req *chat.Empty, stream grpc.ServerStreamingServer[chat
 	defer s.setNonActiveUser(claims.Subject)
 
 	for {
+		fmt.Println("s.users[claims.Subject].userName", s.users[claims.Subject].userName)
 		message := <-s.users[claims.Subject].messageChan
+
+		// check who sent the message
+		fmt.Println("req.ConnectUser", req.ConnectUser)
+		if req.ConnectUser != "" && req.ConnectUser != message.From {
+			continue
+		}
+
 		err := stream.Send(message)
 		if err != nil {
 			return err
 		}
-
-		time.Sleep(2 * time.Second)
 	}
 }
 
@@ -289,7 +297,6 @@ func main() {
 
 	srv := &server{
 		users:     make(map[string]*user),
-		messages:  make(chan chat.MessageRequest, 5),
 		secretKey: []byte("no_secret"),
 	}
 
