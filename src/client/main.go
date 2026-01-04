@@ -92,7 +92,7 @@ func (client *client) connect(connectUser string) {
 			break
 		}
 
-		if response.IsPrivate {
+		if response.To != "" {
 			fmt.Printf("%s: %s\n", response.From, response.Message)
 		} else {
 			fmt.Printf("Public(%s): %s\n", response.From, response.Message)

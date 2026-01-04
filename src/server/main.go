@@ -241,8 +241,6 @@ func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.Mess
 	req.From = claims.Subject
 
 	if req.To != "" && req.To != claims.Subject {
-		req.IsPrivate = true
-
 		user, exist := s.users[req.To]
 		if !exist {
 			return nil, status.Errorf(codes.Internal, "request user %s does not exist", req.To)
@@ -251,8 +249,6 @@ func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.Mess
 		user.messageChan <- req
 	} else {
 		// send message to public channel
-		req.IsPrivate = false
-
 		for _, user := range s.users {
 			if user.userName != claims.Subject {
 				user.messageChan <- req
@@ -261,7 +257,6 @@ func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.Mess
 	}
 
 	// send message to self
-	req.IsPrivate = true
 	user, exist := s.users[claims.Subject]
 	if exist {
 		user.messageChan <- req
