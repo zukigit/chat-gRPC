@@ -290,7 +290,7 @@ func (s *server) Connect(req *chat.ConnectRequest, stream grpc.ServerStreamingSe
 			}
 
 			// check who sent the message
-			if req.ConnectUser != "" && req.ConnectUser != message.From {
+			if req.ConnectUser != "" && req.ConnectUser != message.From && claims.Subject != message.From {
 				fmt.Println("skipped", req.ConnectUser, message.From)
 				continue
 			}

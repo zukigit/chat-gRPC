@@ -3,9 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strings"
@@ -89,19 +87,15 @@ func (client *client) connect(connectUser string) {
 
 	for {
 		response, err := stream.Recv()
-		if err != nil && errors.Is(io.EOF, err) {
+		if err != nil {
 			fmt.Println("Stream ended")
 			break
 		}
-		if err != nil {
-			fmt.Println("err response, err: ", err.Error())
-			continue
-		}
 
 		if response.IsPrivate {
-			fmt.Printf("%s:%s\n", response.From, response.Message)
+			fmt.Printf("%s: %s\n", response.From, response.Message)
 		} else {
-			fmt.Printf("Public(%s):%s\n", response.From, response.Message)
+			fmt.Printf("Public(%s): %s\n", response.From, response.Message)
 		}
 	}
 }
