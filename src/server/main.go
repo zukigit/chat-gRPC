@@ -256,7 +256,6 @@ func (s *server) Send(ctx context.Context, req *chat.MessageRequest) (*chat.Mess
 		for _, user := range s.users {
 			if user.userName != claims.Subject {
 				user.messageChan <- req
-				fmt.Println("message sent to", user.userName)
 			}
 		}
 	}
@@ -291,7 +290,6 @@ func (s *server) Connect(req *chat.ConnectRequest, stream grpc.ServerStreamingSe
 
 			// check who sent the message
 			if req.ConnectUser != "" && req.ConnectUser != message.From && claims.Subject != message.From {
-				fmt.Println("skipped", req.ConnectUser, message.From)
 				continue
 			}
 
